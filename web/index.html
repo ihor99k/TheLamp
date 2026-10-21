@@ -124,7 +124,7 @@
   </header>
   <div id="status" class="status">Не підключено</div>
   <div id="notice" class="notice" hidden></div>
-  <p id="wifiLink" class="hint" hidden><a href="/setup" style="color:var(--user)">Налаштування Wi-Fi</a></p>
+  <p id="wifiLink" class="hint" hidden><a href="/setup" style="color:var(--user)">Налаштування: Wi-Fi, стрічка</a></p>
 
   <main>
     <section class="card">
@@ -549,6 +549,7 @@ function render() {
   const strip = $('#strip');
   if (strip.children.length !== state.leds) {
     strip.innerHTML = '<span></span>'.repeat(state.leds);
+    strip.style.gap = state.leds > 100 ? '0' : state.leds > 40 ? '1px' : '';  // long strips still fit the width
   }
   const litAt = new Map();  // strip position -> index among lit LEDs
   for (let k = 0; k < state.count; k++) litAt.set(ledPosition(k), k);
@@ -584,7 +585,7 @@ function render() {
   hint.classList.toggle('warn', !state.limit);
   hint.textContent = state.limit
     ? 'Береже блок живлення: на яскравому білому лампа трохи пригасає.'
-    : `Без обмеження стрічка на повному білому бере до ~${(state.leds * 0.06).toLocaleString('uk-UA', { maximumFractionDigits: 1 })} А. Потрібен блок 5V від 2 А, а не USB від комп’ютера.`;
+    : `Без обмеження стрічка на повному білому бере до ~${(state.leds * 0.06).toLocaleString('uk-UA', { maximumFractionDigits: 1 })} А. Блок живлення 5V має стільки витримувати, USB від комп’ютера не потягне.`;
 
   renderTimer();
 }

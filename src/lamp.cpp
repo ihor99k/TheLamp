@@ -7,35 +7,36 @@
 
 namespace {
 
-constexpr uint8_t  SETTINGS_VERSION = 3;
+constexpr uint8_t  SETTINGS_VERSION = 4;
 constexpr uint32_t SAVE_DELAY_MS    = 3000;   // wait for sliders to settle before writing flash
 constexpr uint32_t FRAME_MS         = 16;     // ~60 fps for effects
 constexpr uint32_t FADE_MS          = 600;    // on/off transitions
 constexpr uint32_t BRI_FADE_MS      = 150;    // brightness changes: short, so the slider feels live
 constexpr uint32_t SLEEP_FADE_MS    = 30000;  // slow fade-out when the sleep timer ends
 constexpr uint32_t MAX_TIMER_MIN    = 720;
+constexpr uint32_t RESTART_DELAY_MS = 500;    // lets the HTTP reply go out first
 
 const Settings DEFAULTS = {
-    SETTINGS_VERSION, NUM_LEDS,
+    SETTINGS_VERSION, DEFAULT_LEDS,
     80,            // brightness
     255, 147, 41,  // warm white
     0,             // effect: solid color
     128,           // speed
-    NUM_LEDS,      // count
+    DEFAULT_LEDS,  // count
     0,             // align
     1,             // current limit on
 };
 
-CRGB leds[NUM_LEDS];   // what is sent to the strip
-CRGB frame[NUM_LEDS];  // effect canvas, the first `count` pixels are used
+CRGB leds[MAX_LEDS];   // what is sent to the strip, the first `stripLen` pixels are used
+CRGB frame[MAX_LEDS];  // effect canvas, the first `count` pixels are used
 Preferences prefs;
 
-// Where the k-th of `count` lit LEDs sits on the strip.
-uint8_t ledPosition(uint8_t k, uint8_t count, uint8_t align) {
+// Where the k-th of `count` lit LEDs sits on a strip of `len`.
+uint16_t ledPosition(uint16_t k, uint16_t count, uint16_t len, uint8_t align) {
   switch (align) {
-    case 1: return (NUM_LEDS - count) / 2 + k;
-    case 2: return NUM_LEDS - count + k;
-    case 3: return (2 * k + 1) * NUM_LEDS / (2 * count);  // middle of each equal share
+    case 1: return (len - count) / 2 + k;
+    case 2: return len - count + k;
+    case 3: return (2 * k + 1) * len / (2 * count);  // middle of each equal share
     default: return k;
   }
 }
@@ -61,7 +62,7 @@ void Lamp::begin() {
   applySpeed();
   fadeMs_ = FADE_MS;
 
-  FastLED.addLeds<LED_CHIPSET, LED_PIN, LED_COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+  FastLED.addLeds<LED_CHIPSET, LED_PIN, LED_COLOR_ORDER>(leds, s_.stripLen).setCorrection(TypicalLEDStrip);
   applyPowerLimit();
   FastLED.setBrightness(0);
   FastLED.clear(true);
@@ -69,6 +70,15 @@ void Lamp::begin() {
 
 void Lamp::update() {
   uint32_t now = millis();
+
+  if (restartPending_ && (int32_t)(now - restartAt_) >= 0) {
+    prefs.putBytes("s", &s_, sizeof(s_));
+    // The driver still runs the old length: blank all of it, or pixels past a shorter
+    // new end would keep their last color after the reboot.
+    FastLED.clear(true);
+    delay(20);
+    ESP.restart();
+  }
 
   if (timerActive_ && (int32_t)(now - sleepAt_) >= 0) {
     timerActive_ = false;
@@ -111,8 +121,8 @@ void Lamp::renderFrame(uint32_t dt) {
   EFFECTS[s_.effect].render(c);
 
   // Effects draw only the lit LEDs, so animations stay continuous even when spread out.
-  fill_solid(leds, NUM_LEDS, CRGB::Black);
-  for (uint8_t k = 0; k < s_.count; k++) leds[ledPosition(k, s_.count, s_.align)] = frame[k];
+  fill_solid(leds, s_.stripLen, CRGB::Black);
+  for (uint16_t k = 0; k < s_.count; k++) leds[ledPosition(k, s_.count, s_.stripLen, s_.align)] = frame[k];
 }
 
 // ---------- commands ----------
@@ -163,9 +173,10 @@ void Lamp::handleOne(char* cmd) {
     applySpeed();
     markChanged(true);
   } else if (!strcmp(cmd, "count")) {
-    s_.count = constrain(v, 1, NUM_LEDS);
+    s_.count = constrain(v, 1, (long)s_.stripLen);
     markChanged(true);
-  } else if (!strcmp(cmd, "align")) {
+  } else if (!strcmp(cmd, "leds")) setStripLen(v);
+  else if (!strcmp(cmd, "align")) {
     s_.align = constrain(v, 0, 3);
     markChanged(true);
   } else if (!strcmp(cmd, "limit")) {
@@ -192,7 +203,7 @@ void Lamp::setEffect(int index) {
   if (index < 0 || index >= EFFECT_COUNT) return;
   s_.effect = index;
   effectsReset();
-  fill_solid(frame, NUM_LEDS, CRGB::Black);
+  fill_solid(frame, MAX_LEDS, CRGB::Black);
   setPower(true);
   markChanged(true);
 }
@@ -205,6 +216,17 @@ void Lamp::setTimer(uint32_t minutes) {
   timerActive_ = minutes > 0;
   sleepAt_ = millis() + minutes * 60000UL;
   if (timerActive_) setPower(true);
+  markChanged(false);
+}
+
+void Lamp::setStripLen(long n) {
+  n = constrain(n, 1, (long)MAX_LEDS);
+  if (n == s_.stripLen) return;
+  if (s_.count == s_.stripLen || s_.count > n) s_.count = n;  // a fully lit strip stays fully lit
+  s_.stripLen = n;
+  Serial.printf("Strip length %ld: restarting\n", n);
+  restartPending_ = true;
+  restartAt_ = millis() + RESTART_DELAY_MS;
   markChanged(false);
 }
 
@@ -222,13 +244,14 @@ void Lamp::applySpeed() {
 
 String Lamp::stateJson() const {
   uint32_t left = timerActive_ ? (sleepAt_ - millis()) / 1000 : 0;
-  char buf[192];
+  char buf[208];
   snprintf(buf, sizeof(buf),
            "{\"on\":%d,\"bri\":%u,\"color\":\"%02X%02X%02X\",\"fx\":%u,\"speed\":%u,"
            "\"count\":%u,\"align\":%u,\"limit\":%u,\"ma\":%lu,\"timer\":%lu,"
-           "\"leds\":%u,\"nfx\":%u}",
+           "\"leds\":%u,\"maxLeds\":%u,\"nfx\":%u}",
            on_, s_.brightness, s_.r, s_.g, s_.b, s_.effect, s_.speed, s_.count, s_.align,
-           s_.limit, (unsigned long)MAX_MILLIAMPS, (unsigned long)left, NUM_LEDS, EFFECT_COUNT);
+           s_.limit, (unsigned long)MAX_MILLIAMPS, (unsigned long)left, s_.stripLen, MAX_LEDS,
+           EFFECT_COUNT);
   return buf;
 }
 
@@ -254,13 +277,10 @@ void Lamp::loadSettings() {
       stored.version == SETTINGS_VERSION) {
     s_ = stored;
   }
-  if (s_.stripLen != NUM_LEDS) {
-    s_.stripLen = NUM_LEDS;
-    s_.count = NUM_LEDS;
-  }
+  s_.stripLen = constrain(s_.stripLen, 1, MAX_LEDS);
   s_.brightness = constrain(s_.brightness, 1, 255);
   s_.speed = constrain(s_.speed, 1, 255);
-  s_.count = constrain(s_.count, 1, NUM_LEDS);
+  s_.count = constrain(s_.count, 1, s_.stripLen);
   if (s_.effect >= EFFECT_COUNT) s_.effect = 0;
   if (s_.align > 3) s_.align = 0;
   s_.limit = s_.limit != 0;
@@ -281,6 +301,7 @@ void Lamp::printHelp() {
       "  fx N | next              effect\n"
       "  speed 1..255             effect speed (128 = normal)\n"
       "  count 1..N               how many LEDs are lit\n"
+      "  leds 1..MAX              LEDs on the strip (restarts the lamp)\n"
       "  align 0|1|2|3            lit LEDs at start | center | end | spread evenly\n"
       "  limit 1|0                strip current limit on | off\n"
       "  timer MIN                sleep timer, 0 = cancel\n"

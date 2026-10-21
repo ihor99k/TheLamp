@@ -52,7 +52,7 @@ void fxCandle(FxContext& c) {
   }
 }
 
-uint8_t heat[NUM_LEDS];
+uint8_t heat[MAX_LEDS];
 uint32_t fireAcc;
 
 void fireStep(uint16_t n) {
@@ -78,7 +78,7 @@ void fxFire(FxContext& c) {
 }
 
 void fxRainbow(FxContext& c) {
-  fill_rainbow(c.px, c.n, c.t / 30, 255 / c.n);
+  fill_rainbow_circular(c.px, c.n, c.t / 30);  // one full turn of hues at any length
 }
 
 void fxHueCycle(FxContext& c) {

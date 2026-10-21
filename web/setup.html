@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0b0a10">
-<title>TheLamp Wi-Fi</title>
+<title>TheLamp Settings</title>
 <style>
   :root {
     --bg: #0b0a10; --card: #15131c; --card-2: #1d1a26; --line: #2a2634;
@@ -29,7 +29,7 @@
   #ipLink { display: block; color: var(--accent); font-size: 18px; font-weight: 600; word-break: break-all; }
   .hint { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
   label { display: block; margin: 14px 0 6px; color: var(--muted); font-size: 14px; }
-  input[type=text], input[type=password] { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px;
+  input[type=text], input[type=password], input[type=number] { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px;
          background: var(--card-2); color: var(--text); font: inherit; }
   input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .row { display: flex; gap: 8px; }
@@ -53,7 +53,7 @@
 </head>
 <body>
 <main>
-  <h1>TheLamp · Wi-Fi</h1>
+  <h1>TheLamp · Налаштування</h1>
 
   <section class="card">
     <h2>Стан</h2>
@@ -97,6 +97,16 @@
       <button id="go" class="btn primary">Підключити лампу</button>
     </form>
     <p class="hint">Лампа працює лише з Wi-Fi 2,4 ГГц.</p>
+  </section>
+
+  <section class="card">
+    <h2>Стрічка</h2>
+    <label for="leds">Скільки світлодіодів на стрічці</label>
+    <div class="row">
+      <input id="leds" type="number" inputmode="numeric" min="1" max="300" step="1">
+      <button id="saveLeds" class="btn" type="button">Зберегти</button>
+    </div>
+    <p id="ledsMsg" class="hint msg">Після збереження лампа перезавантажиться, це кілька секунд.</p>
   </section>
 
   <p class="hint"><a href="/control">Керувати лампою →</a> (працює і без домашньої мережі)</p>
@@ -197,9 +207,54 @@ $('#saveIp').onclick = async () => {
   $('#saveIp').disabled = false;
 };
 
+// ---------- strip length ----------
+
+let stripLoaded = false;
+let ledsEdited = false;
+
+function ledsMessage(text, isError) {
+  $('#ledsMsg').textContent = text;
+  $('#ledsMsg').classList.toggle('error', !!isError);
+}
+
+async function loadStrip() {
+  try {
+    const s = await api('/api/state');
+    $('#leds').max = s.maxLeds;
+    if (!ledsEdited) $('#leds').value = s.leds;
+    stripLoaded = true;
+  } catch {
+    // retried on the next poll
+  }
+}
+
+$('#leds').oninput = () => { ledsEdited = true; };
+
+$('#saveLeds').onclick = async () => {
+  const n = Number($('#leds').value), max = Number($('#leds').max);
+  if (!Number.isInteger(n) || n < 1 || n > max) {
+    ledsMessage(`Від 1 до ${max}.`, true);
+    return;
+  }
+  $('#saveLeds').disabled = true;
+  try {
+    await api('/api/command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain', 'X-Lamp-Request': '1' },
+      body: `leds ${n}`,
+    });
+    ledsEdited = false;
+    ledsMessage(`Збережено: ${n}. Лампа перезавантажується, сторінка сама підхопить її за кілька секунд.`);
+  } catch (err) {
+    ledsMessage(err.message, true);
+  }
+  $('#saveLeds').disabled = false;
+};
+
 async function poll() {
   try {
     render(await api('/api/wifi'));
+    if (!stripLoaded) loadStrip();
   } catch {
     // Joining the home network moves the lamp's radio to another channel: phones often drop off the setup AP.
     if (lastOnline) setState('online', `Лампа підключилась до «${lastOnline.ssid}».`);

@@ -7,12 +7,12 @@
 // Settings that survive a power cycle (stored in NVS).
 struct Settings {
   uint8_t version;
-  uint8_t stripLen;    // NUM_LEDS at save time: reset `count` when the strip changes
+  uint16_t stripLen;   // LEDs on the strip, 1..MAX_LEDS
   uint8_t brightness;  // 1..255, perceptual
   uint8_t r, g, b;
   uint8_t effect;
   uint8_t speed;       // 1..255, 128 = normal
-  uint8_t count;       // how many LEDs are lit, 1..NUM_LEDS
+  uint16_t count;      // how many LEDs are lit, 1..stripLen
   uint8_t align;       // where they are: 0 start, 1 center, 2 end, 3 spread evenly
   uint8_t limit;       // 1 = cap strip current at MAX_MILLIAMPS
 };
@@ -37,6 +37,7 @@ class Lamp {
   void setPower(bool value);
   void setEffect(int index);
   void setTimer(uint32_t minutes);
+  void setStripLen(long n);
   void applySpeed();
   void applyPowerLimit();
   void stepLevel(uint32_t dt);
@@ -61,4 +62,7 @@ class Lamp {
   bool changed_ = false;
   bool dirty_ = false;
   uint32_t lastChange_ = 0;
+
+  bool restartPending_ = false;  // strip length changed: the LED driver only takes it at boot
+  uint32_t restartAt_ = 0;
 };
