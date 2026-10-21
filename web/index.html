@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0a10">
+<title>TheLamp</title>
+<style>
+  :root {
+    --bg: #0b0a10;
+    --card: #15131c;
+    --card-2: #1d1a26;
+    --line: #2a2634;
+    --track: #2c2836;
+    --text: #ece8f2;
+    --muted: #8e879c;
+    --ok: #3ddc84;
+    --warn: #f5b83d;
+    --lamp: #ff9329;   /* accent: what the lamp is showing now */
+    --user: #ffc98a;   /* the color picked by the user */
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body.is-on {
+    background-image: radial-gradient(120% 55% at 50% -12%, color-mix(in srgb, var(--lamp) 20%, transparent), transparent 70%);
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .wrap { max-width: 460px; margin: 0 auto; padding: 16px 16px 48px; }
+
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0 6px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 650; letter-spacing: .2px; }
+  .brand i { width: 12px; height: 12px; border-radius: 50%; background: var(--muted); transition: .3s; }
+  .is-on .brand i { background: var(--lamp); box-shadow: 0 0 12px var(--lamp); }
+  .btn { border: 1px solid var(--line); background: var(--card-2); border-radius: 999px; padding: 9px 16px; font-weight: 600; }
+  .btn.primary { background: var(--text); color: var(--bg); border-color: transparent; }
+  .btn:disabled { opacity: .4; cursor: default; }
+
+  .status { display: flex; align-items: center; gap: 8px; margin: 4px 0 14px; color: var(--muted); font-size: 13px; }
+  .status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #5a5466; }
+  .status.on::before { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .status.connecting::before { background: var(--warn); animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: .2; } }
+
+  .notice { background: #2a1d12; border: 1px solid #5a3a1a; color: #ffcf9a; padding: 12px 14px; border-radius: 12px; font-size: 14px; margin-bottom: 12px; }
+
+  main { transition: opacity .3s, filter .3s; }
+  .offline main { opacity: .4; filter: saturate(.5); pointer-events: none; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin-bottom: 12px; }
+  h2 { margin: 0 0 12px; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+  .hint { margin: 10px 0 0; color: var(--muted); font-size: 13px; }
+  .hint:empty { display: none; }
+
+  .strip { display: flex; justify-content: center; gap: 3px; padding: 6px 2px 18px; }
+  .strip span { flex: 1; max-width: 12px; aspect-ratio: 1; border-radius: 50%; background: #24212c; transition: background .3s, box-shadow .3s, opacity .3s; }
+  .strip span.lit { background: var(--c); }
+  .is-on .strip span.lit { box-shadow: 0 0 10px var(--c); }
+  body:not(.is-on) .strip span.lit { opacity: .25; }
+
+  .hero-row { display: flex; align-items: center; gap: 16px; }
+  .power { flex: none; display: grid; place-items: center; width: 68px; height: 68px; border-radius: 50%; border: 1.5px solid var(--line); background: var(--card-2); color: var(--muted); transition: .3s; }
+  .power svg { width: 28px; height: 28px; }
+  .is-on .power { color: var(--lamp); border-color: var(--lamp); box-shadow: 0 0 26px -6px var(--lamp), inset 0 0 18px -8px var(--lamp); }
+  .grow { flex: 1; min-width: 0; }
+
+  .label-row { display: flex; justify-content: space-between; color: var(--muted); font-size: 14px; }
+  .label-row b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 30px; margin: 2px 0; background: transparent; --p: 50%; }
+  input[type=range]:focus { outline: none; }
+  input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: linear-gradient(to right, var(--lamp) var(--p), var(--track) var(--p)); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -8px; border-radius: 50%; background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.5); }
+  input[type=range]::-moz-range-track { height: 6px; border-radius: 3px; background: linear-gradient(to right, var(--lamp) var(--p), var(--track) var(--p)); }
+  input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border: 0; border-radius: 50%; background: #fff; }
+
+  .swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+  .sw { position: relative; aspect-ratio: 1; padding: 0; border: 0; border-radius: 50%; background: var(--c); transition: transform .15s; }
+  .sw:active { transform: scale(.92); }
+  .sw.active { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--text); }
+  .sw.custom { background: conic-gradient(#f33, #fd3, #3f6, #3df, #36f, #d3f, #f33); overflow: hidden; }
+  .sw.custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+  #colorCard.muted .swatches { opacity: .55; }
+
+  .fx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; margin-bottom: 14px; }
+  .fx { position: relative; overflow: hidden; padding: 9px 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card-2); font-size: 13.5px; text-align: left; }
+  .fx::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 6px; height: 3px; border-radius: 2px; background: var(--g); opacity: .9; }
+  .fx.active { border-color: var(--lamp); background: color-mix(in srgb, var(--lamp) 14%, var(--card-2)); }
+
+  .seg { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 12px; padding: 3px; border: 1px solid var(--line); border-radius: 12px; background: var(--card-2); }
+  .seg button { padding: 9px 2px; border: 0; border-radius: 9px; background: none; color: var(--muted); font-size: 13.5px; }
+  @media (max-width: 400px) { .seg { grid-template-columns: repeat(2, 1fr); } }
+  .seg button.active { background: var(--line); color: var(--text); }
+
+  .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; }
+  input[role=switch] { -webkit-appearance: none; appearance: none; position: relative; flex: none; width: 48px; height: 28px; margin: 0; border-radius: 999px; background: var(--track); cursor: pointer; transition: background .2s; }
+  input[role=switch]::before { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform .2s; }
+  input[role=switch]:checked { background: var(--lamp); }
+  input[role=switch]:checked::before { transform: translateX(20px); }
+  #limitHint.warn { color: var(--warn); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chips button { flex: 1 0 auto; padding: 9px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--card-2); font-size: 14px; }
+  .chips button.active { border-color: var(--lamp); color: var(--lamp); }
+
+  details.card summary { color: var(--muted); font-size: 14px; cursor: pointer; }
+  .console { display: flex; gap: 8px; margin-top: 12px; }
+  .console input { flex: 1; min-width: 0; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card-2); color: var(--text); font: 14px ui-monospace, Consolas, monospace; }
+  pre#log { max-height: 180px; overflow: auto; margin: 10px 0 0; color: var(--muted); font: 12px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
+</style>
+</head>
+<body class="offline is-on">
+<div class="wrap">
+  <header>
+    <div class="brand"><i></i>TheLamp</div>
+    <button id="connectBtn" class="btn primary">Підключити</button>
+  </header>
+  <div id="status" class="status">Не підключено</div>
+  <div id="notice" class="notice" hidden></div>
+  <p id="wifiLink" class="hint" hidden><a href="/setup" style="color:var(--user)">Налаштування Wi-Fi</a></p>
+
+  <main>
+    <section class="card">
+      <div id="strip" class="strip"></div>
+      <div class="hero-row">
+        <button id="power" class="power" aria-label="Увімкнути або вимкнути">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/></svg>
+        </button>
+        <div class="grow">
+          <div class="label-row"><span>Яскравість</span><b id="briVal"></b></div>
+          <input id="bri" type="range" min="1" max="255">
+        </div>
+      </div>
+    </section>
+
+    <section id="colorCard" class="card">
+      <h2>Колір</h2>
+      <div id="swatches" class="swatches"></div>
+      <p id="colorHint" class="hint"></p>
+    </section>
+
+    <section class="card">
+      <h2>Ефект</h2>
+      <div id="fxGrid" class="fx-grid"></div>
+      <div class="label-row"><span>Швидкість</span><b id="speedVal"></b></div>
+      <input id="speed" type="range" min="1" max="255">
+    </section>
+
+    <section class="card">
+      <h2>Скільки діодів світиться</h2>
+      <div class="label-row"><span>Кількість</span><b id="countVal"></b></div>
+      <input id="count" type="range" min="1" max="30">
+      <div id="align" class="seg">
+        <button data-v="0">З початку</button>
+        <button data-v="1">По центру</button>
+        <button data-v="2">З кінця</button>
+        <button data-v="3">Розподілено</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Таймер сну</h2>
+      <div id="timer" class="chips">
+        <button data-v="0">Вимк</button>
+        <button data-v="15">15 хв</button>
+        <button data-v="30">30 хв</button>
+        <button data-v="60">1 год</button>
+        <button data-v="120">2 год</button>
+      </div>
+      <p id="timerLeft" class="hint"></p>
+    </section>
+
+    <section class="card">
+      <h2>Живлення</h2>
+      <label class="switch-row">
+        <span id="limitTitle"></span>
+        <input id="limit" type="checkbox" role="switch">
+      </label>
+      <p id="limitHint" class="hint"></p>
+    </section>
+
+    <details class="card">
+      <summary>Консоль команд</summary>
+      <form id="consoleForm" class="console">
+        <input id="consoleIn" placeholder="напр. bri 40; fx 2" autocomplete="off">
+        <button class="btn">Надіслати</button>
+      </form>
+      <pre id="log"></pre>
+    </details>
+  </main>
+</div>
+
+<script>
+// Nordic UART Service, must match src/ble_control.cpp
+const SVC = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+const RX  = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+const TX  = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
+
+// Same order as EFFECTS[] in src/effects.cpp
+const EFFECTS = [
+  { name: 'Колір',       color: true },
+  { name: 'Дихання',     color: true },
+  { name: 'Свічка',      pal: ['#ff4a08', '#ff7a14', '#ff9a2a'] },
+  { name: 'Вогонь',      pal: ['#ff2200', '#ff6a00', '#ffae00'] },
+  { name: 'Веселка',     pal: 'rainbow' },
+  { name: 'Переливання', pal: 'rainbow' },
+  { name: 'Хвиля',       color: true },
+  { name: 'Комета',      color: true },
+  { name: 'Сканер',      color: true },
+  { name: 'Зорі',        color: true },
+  { name: 'Конфеті',     pal: 'rainbow' },
+  { name: 'Океан',       pal: ['#0030ff', '#0090ff', '#00d8ff'] },
+  { name: 'Лава',        pal: ['#8a0000', '#ff0000', '#ff5a00'] },
+  { name: 'Сяйво',       pal: ['#00ff7a', '#00c8a0', '#7a14c8'] },
+  { name: 'Жонглер',     pal: 'rainbow' },
+  { name: 'Гірлянда',    color: true },
+];
+
+// [color sent to the strip, how it looks on screen, name]
+const SWATCHES = [
+  ['FF9329', '#ffc98a', 'Тепле біле'],
+  ['FF5A0A', '#ff9a4a', 'Свічка'],
+  ['FFC890', '#fff0dc', 'Нейтральне біле'],
+  ['FFFFFF', '#f4f8ff', 'Холодне біле'],
+  ['FF1000', '#ff2a1a', 'Червоний — найменше заважає сну'],
+  ['FF4000', '#ff7a1a', 'Бурштин'],
+  ['FF2060', '#ff4d88', 'Рожевий'],
+  ['7A1CFF', '#9a5cff', 'Фіолетовий'],
+  ['0038FF', '#3d6bff', 'Синій'],
+  ['00E0B0', '#2be0bc', 'Бірюзовий'],
+  ['30FF10', '#5cf03c', 'Зелений'],
+];
+
+const $ = s => document.querySelector(s);
+const httpMode = window.LAMP_HTTP === true;
+const enc = new TextEncoder(), dec = new TextDecoder();
+const state = { on: 1, bri: 80, color: 'FF9329', fx: 0, speed: 128, count: 30, align: 0, limit: 1, ma: 1500, timer: 0, leds: 30 };
+let device = null, rxChar = null, txChar = null;
+let manualDisconnect = false, reconnecting = false, timerEnd = 0;
+
+// After a local change, ignore the lamp's reports of that field for a moment:
+// they lag behind and would make controls jump back.
+const touched = {};
+const touch = (...keys) => { for (const k of keys) touched[k] = Date.now(); };
+const isTouched = k => Date.now() - (touched[k] || 0) < 1200;
+
+// ---------- BLE ----------
+
+// Web Bluetooth rejects overlapping GATT operations, so run them one by one.
+let chain = Promise.resolve();
+function gatt(op) {
+  const p = chain.then(op);
+  chain = p.catch(() => {});
+  return p;
+}
+
+// Latest value per key wins: dragging a slider doesn't flood the link.
+const pending = new Map();
+let pumping = false;
+function send(key, cmd) {
+  if (!httpMode && !rxChar) return;
+  pending.set(key, cmd);
+  pump();
+}
+async function pump() {
+  if (pumping) return;
+  pumping = true;
+  while (pending.size && (httpMode || rxChar)) {
+    const [key, cmd] = pending.entries().next().value;
+    pending.delete(key);
+    try {
+      if (httpMode) {
+        onStateText(await httpRequest('/api/command', {
+          method: 'POST', headers: { 'Content-Type': 'text/plain', 'X-Lamp-Request': '1' }, body: cmd
+        }));
+      } else await gatt(() => rxChar.writeValueWithResponse(enc.encode(cmd)));
+      log('→ ' + cmd);
+    } catch (e) {
+      log('! ' + e.message);
+      if (httpMode) {
+        pending.clear();
+        setStatus('off', 'Зв’язок із лампою втрачено');
+      }
+    }
+  }
+  pumping = false;
+}
+
+async function httpRequest(path, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
+  try {
+    const response = await fetch(path, { ...options, cache: 'no-store', signal: controller.signal });
+    if (!response.ok) throw new Error('Помилка запиту: ' + response.status);
+    return await response.text();
+  } finally { clearTimeout(timeout); }
+}
+
+async function pollHttp() {
+  try {
+    if (!pumping) {
+      onStateText(await httpRequest('/api/state'));
+      setStatus('on', 'Підключено через Wi-Fi');
+    }
+  } catch {
+    setStatus('off', 'Немає зв’язку. Перевір Wi-Fi — перепідключаюсь…');
+  } finally { setTimeout(pollHttp, 1000); }
+}
+
+async function connect() {
+  try {
+    device = await navigator.bluetooth.requestDevice({ filters: [{ services: [SVC] }] });
+  } catch {
+    return;  // chooser closed
+  }
+  device.addEventListener('gattserverdisconnected', onDisconnected);
+  manualDisconnect = false;
+  await openGatt();
+}
+
+async function openGatt() {
+  setStatus('connecting', 'Підключення…');
+  try {
+    const server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(SVC);
+    rxChar = await svc.getCharacteristic(RX);
+    txChar = await svc.getCharacteristic(TX);
+    txChar.oncharacteristicvaluechanged = e => onStateText(dec.decode(e.target.value));
+    await gatt(() => txChar.startNotifications());
+    onStateText(dec.decode(await gatt(() => txChar.readValue())));
+    setStatus('on', 'Підключено: ' + (device.name || 'TheLamp'));
+    return true;
+  } catch (e) {
+    rxChar = txChar = null;
+    setStatus('off', 'Не вдалося підключитись');
+    log('! ' + e.message);
+    return false;
+  }
+}
+
+async function onDisconnected() {
+  rxChar = txChar = null;
+  pending.clear();
+  if (manualDisconnect || reconnecting) {
+    if (manualDisconnect) setStatus('off', 'Не підключено');
+    return;
+  }
+  reconnecting = true;
+  for (let i = 0; i < 5 && !manualDisconnect; i++) {
+    setStatus('connecting', 'Зв’язок втрачено, перепідключаюсь…');
+    await new Promise(r => setTimeout(r, 1500));
+    if (manualDisconnect) break;
+    if (await openGatt()) { reconnecting = false; return; }
+  }
+  reconnecting = false;
+  setStatus('off', 'Не підключено');
+}
+
+function disconnect() {
+  manualDisconnect = true;
+  if (device && device.gatt.connected) device.gatt.disconnect();
+  else setStatus('off', 'Не підключено');
+}
+
+let syncTimer = 0;
+function onStateText(text) {
+  let s;
+  try {
+    s = JSON.parse(text);
+  } catch {
+    // Notification got cut by a small BLE packet: read the full value once things calm down.
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => {
+      if (txChar) gatt(() => txChar.readValue()).then(v => onStateText(dec.decode(v))).catch(() => {});
+    }, 400);
+    return;
+  }
+  for (const [k, v] of Object.entries(s)) {
+    if (!isTouched(k)) state[k] = v;
+  }
+  if (!isTouched('timer')) timerEnd = state.timer ? Date.now() + state.timer * 1000 : 0;
+  log('← ' + text);
+  render();
+}
+
+// ---------- UI ----------
+
+function setStatus(kind, text) {
+  const el = $('#status');
+  el.className = 'status ' + kind;
+  el.textContent = text;
+  document.body.classList.toggle('offline', kind !== 'on');
+  const btn = $('#connectBtn');
+  if (httpMode) {
+    btn.hidden = true;
+    return;
+  }
+  const linked = kind !== 'off';
+  btn.textContent = linked ? 'Відключити' : 'Підключити';
+  btn.classList.toggle('primary', !linked);
+}
+
+function log(line) {
+  const el = $('#log');
+  el.textContent = (line + '\n' + el.textContent).split('\n').slice(0, 40).join('\n');
+}
+
+const userCss = hex => (SWATCHES.find(s => s[0] === hex.toUpperCase()) || [0, '#' + hex])[1];
+function palAt(pal, t) {
+  if (pal === 'rainbow') return `hsl(${Math.round(t * 300)} 100% 55%)`;
+  return pal[Math.min(pal.length - 1, Math.floor(t * pal.length))];
+}
+function fxBar(fx) {
+  if (fx.color) return 'var(--user)';
+  if (fx.pal === 'rainbow') return 'linear-gradient(90deg,#f33,#fd3,#3f6,#3df,#36f,#d3f)';
+  return `linear-gradient(90deg,${fx.pal.join(',')})`;
+}
+function setRange(el, value) {
+  el.value = value;
+  el.style.setProperty('--p', ((el.value - el.min) / (el.max - el.min) * 100) + '%');
+}
+const speedMul = v => Math.pow(2, (v - 128) / 48);
+
+// Where the k-th lit LED sits on the strip: same math as ledPosition() in src/lamp.cpp.
+function ledPosition(k) {
+  const N = state.leds, n = state.count;
+  switch (state.align) {
+    case 1: return Math.floor((N - n) / 2) + k;
+    case 2: return N - n + k;
+    case 3: return Math.floor((2 * k + 1) * N / (2 * n));
+    default: return k;
+  }
+}
+
+function buildUI() {
+  const sw = $('#swatches');
+  for (const [hex, css, name] of SWATCHES) {
+    const b = document.createElement('button');
+    b.className = 'sw';
+    b.style.setProperty('--c', css);
+    b.title = name;
+    b.setAttribute('aria-label', name);
+    b.dataset.hex = hex;
+    b.onclick = () => pickColor(hex);
+    sw.appendChild(b);
+  }
+  const custom = document.createElement('label');
+  custom.className = 'sw custom';
+  custom.title = 'Свій колір';
+  custom.innerHTML = '<input id="picker" type="color" aria-label="Свій колір">';
+  sw.appendChild(custom);
+  $('#picker').oninput = e => pickColor(e.target.value.slice(1).toUpperCase());
+
+  const grid = $('#fxGrid');
+  EFFECTS.forEach((fx, i) => {
+    const b = document.createElement('button');
+    b.className = 'fx';
+    b.textContent = fx.name;
+    b.style.setProperty('--g', fxBar(fx));
+    b.onclick = () => {
+      touch('fx', 'on');
+      state.fx = i;
+      state.on = 1;
+      send('fx', 'fx ' + i);
+      render();
+    };
+    grid.appendChild(b);
+  });
+
+  $('#power').onclick = () => {
+    touch('on');
+    state.on = state.on ? 0 : 1;
+    send('power', state.on ? 'on' : 'off');
+    render();
+  };
+  for (const key of ['bri', 'speed', 'count']) {
+    const el = $('#' + key);
+    el.oninput = () => {
+      touch(key);
+      state[key] = +el.value;
+      if (key === 'bri') { touch('on'); state.on = 1; }
+      send(key, key + ' ' + el.value);
+      render();
+    };
+  }
+  $('#align').onclick = e => {
+    const v = e.target.dataset.v;
+    if (v === undefined) return;
+    touch('align');
+    state.align = +v;
+    send('align', 'align ' + v);
+    render();
+  };
+  $('#limit').onchange = e => {
+    touch('limit');
+    state.limit = e.target.checked ? 1 : 0;
+    send('limit', 'limit ' + state.limit);
+    render();
+  };
+  $('#timer').onclick = e => {
+    const v = e.target.dataset.v;
+    if (v === undefined) return;
+    touch('timer', 'on');
+    state.timer = v * 60;
+    if (v > 0) state.on = 1;
+    timerEnd = v > 0 ? Date.now() + v * 60000 : 0;
+    send('timer', 'timer ' + v);
+    render();
+  };
+  $('#consoleForm').onsubmit = e => {
+    e.preventDefault();
+    const text = $('#consoleIn').value.trim();
+    if (text) send('raw' + Date.now(), text);
+    $('#consoleIn').value = '';
+  };
+  $('#connectBtn').onclick = () => (rxChar || reconnecting ? disconnect() : connect());
+  setInterval(renderTimer, 1000);
+}
+
+function pickColor(hex) {
+  touch('color', 'on');
+  state.color = hex;
+  state.on = 1;
+  if (!EFFECTS[state.fx].color) {  // effect has its own colors: switch to plain color
+    touch('fx');
+    state.fx = 0;
+    send('fx', 'fx 0');
+  }
+  send('color', 'color ' + hex);
+  render();
+}
+
+function render() {
+  const fx = EFFECTS[state.fx] || EFFECTS[0];
+  const user = userCss(state.color);
+  const root = document.documentElement.style;
+  root.setProperty('--user', user);
+  root.setProperty('--lamp', fx.color ? user : palAt(fx.pal, .5));
+  document.body.classList.toggle('is-on', !!state.on);
+
+  // strip preview: which LEDs are lit and roughly in what colors
+  const strip = $('#strip');
+  if (strip.children.length !== state.leds) {
+    strip.innerHTML = '<span></span>'.repeat(state.leds);
+  }
+  const litAt = new Map();  // strip position -> index among lit LEDs
+  for (let k = 0; k < state.count; k++) litAt.set(ledPosition(k), k);
+  [...strip.children].forEach((dot, i) => {
+    const k = litAt.get(i);
+    const on = k !== undefined;
+    dot.classList.toggle('lit', on);
+    dot.style.setProperty('--c', fx.color ? user : palAt(fx.pal, on ? k / state.count : 0));
+    dot.style.opacity = on && state.on ? 0.35 + 0.65 * state.bri / 255 : '';
+  });
+
+  setRange($('#bri'), state.bri);
+  $('#briVal').textContent = Math.round(state.bri / 255 * 100) + '%';
+
+  document.querySelectorAll('.sw[data-hex]').forEach(b => b.classList.toggle('active', b.dataset.hex === state.color));
+  $('#picker').value = '#' + state.color.toLowerCase();
+  $('#colorCard').classList.toggle('muted', !fx.color);
+  $('#colorHint').textContent = fx.color ? '' : `«${fx.name}» має власні кольори. Вибір кольору ввімкне режим «Колір».`;
+
+  document.querySelectorAll('.fx').forEach((b, i) => b.classList.toggle('active', i === state.fx));
+  setRange($('#speed'), state.speed);
+  $('#speedVal').textContent = '×' + speedMul(state.speed).toFixed(1);
+
+  const count = $('#count');
+  count.max = state.leds;
+  setRange(count, state.count);
+  $('#countVal').textContent = `${state.count} з ${state.leds}`;
+  document.querySelectorAll('#align button').forEach(b => b.classList.toggle('active', +b.dataset.v === state.align));
+
+  $('#limit').checked = !!state.limit;
+  $('#limitTitle').textContent = `Обмеження струму ${(state.ma / 1000).toLocaleString('uk-UA')} А`;
+  const hint = $('#limitHint');
+  hint.classList.toggle('warn', !state.limit);
+  hint.textContent = state.limit
+    ? 'Береже блок живлення: на яскравому білому лампа трохи пригасає.'
+    : `Без обмеження стрічка на повному білому бере до ~${(state.leds * 0.06).toLocaleString('uk-UA', { maximumFractionDigits: 1 })} А. Потрібен блок 5V від 2 А, а не USB від комп’ютера.`;
+
+  renderTimer();
+}
+
+function renderTimer() {
+  const left = timerEnd ? Math.max(0, Math.round((timerEnd - Date.now()) / 1000)) : 0;
+  const m = Math.floor(left / 60), s = String(left % 60).padStart(2, '0');
+  $('#timerLeft').textContent = left ? `Плавно вимкнеться через ${m}:${s}` : '';
+  document.querySelectorAll('#timer button').forEach(b => b.classList.toggle('active', b.dataset.v === '0' && !left));
+}
+
+buildUI();
+render();
+setStatus('off', 'Не підключено');
+if (httpMode) {
+  $('#wifiLink').hidden = false;
+  setStatus('connecting', 'Підключення через Wi-Fi…');
+  pollHttp();
+} else if (!window.isSecureContext) {
+  $('#notice').hidden = false;
+  $('#notice').textContent = 'Bluetooth працює лише на сторінках https:// (або відкритих як файл на комп’ютері).';
+  $('#connectBtn').disabled = true;
+} else if (!navigator.bluetooth) {
+  $('#notice').hidden = false;
+  $('#notice').textContent = 'Цей браузер не вміє Bluetooth. Відкрий сторінку в Chrome на Android або на комп’ютері. На iPhone — у браузері Bluefy.';
+  $('#connectBtn').disabled = true;
+}
+</script>
+</body>
+</html>
